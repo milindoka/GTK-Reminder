@@ -1,0 +1,7 @@
+/* style.css */
+window {
+    /* Target the window's background layer */
+    background-color: transparent;
+    /* This line is crucial for transparency to work correctly */
+    background-image: none;
+}
