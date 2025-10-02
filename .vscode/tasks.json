@@ -1,0 +1,21 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build helloworld GTK3mm",
+      "type": "shell",
+      "command": "/bin/bash",
+      "args": [
+        "-c",
+        "g++ -std=c++17 -o \"${workspaceFolder}/hello\" \"${workspaceFolder}/main.cc\" \"${workspaceFolder}/helloworld.cc\" $(pkg-config --cflags --libs gtkmm-3.0) -pthread"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": [
+        "$gcc"
+      ]
+    }
+  ]
+}

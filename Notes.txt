@@ -1,0 +1,16 @@
+Installed development libraries first.
+
+sudo apt install libgtkmm-3.0-dev   (libgtkmm-4.0-dev was not availabel on ubuntu 22.04)
+
+
+After that 
+
+g++ helloworld.cc main.cc -o hello_gtkmm `pkg-config --cflags --libs gtkmm-3.0` -std=c++17
+
+ is the only command that compiles, builds and create executable 'hello_gtkmm' from .cc and .h files.
+ 
+ 
+
+
+
+
