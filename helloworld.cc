@@ -9,6 +9,9 @@
 #include <gdkmm/screen.h> // <-- NEW: Include for Gdk::Screen
 #include <fstream>
 #include <regex>
+#include <optional>
+#include <unistd.h>
+#include <cctype>
 #include <chrono>
 #include <algorithm>
 
@@ -106,8 +109,9 @@ HelloWorld::HelloWorld()
   ifs.close();
 
   // Find table rows
-  std::regex tr_re("(?i)<tr[^>]*>([\\s\\S]*?)</tr>", std::regex::icase);
-  std::regex cell_re("(?i)<t[dh][^>]*>([\\s\\S]*?)</t[dh]>", std::regex::icase);
+  // Use std::regex::icase for case-insensitive matching; avoid unsupported inline flags like (?i)
+  std::regex tr_re("<tr[^>]*>([\\s\\S]*?)</tr>", std::regex::icase);
+  std::regex cell_re("<t[dh][^>]*>([\\s\\S]*?)</t[dh]>", std::regex::icase);
   std::sregex_iterator tr_it(html.begin(), html.end(), tr_re);
   std::sregex_iterator tr_end;
 
