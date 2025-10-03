@@ -89,20 +89,23 @@ HelloWorld::HelloWorld()
   if (!ifs.is_open()) {
     m_button.set_label("Error in reding FD");
     // add buttons (others blank) and show
+    // --- START OF MODIFIED LOGIC FOR ERROR CASE ---
     m_box.pack_start(m_button, Gtk::PackOptions::PACK_SHRINK);
     m_box.pack_start(m_button1, Gtk::PackOptions::PACK_SHRINK);
+    m_button1.hide(); // Hide unused buttons explicitly
     m_box.pack_start(m_button2, Gtk::PackOptions::PACK_SHRINK);
+    m_button2.hide();
     m_box.pack_start(m_button3, Gtk::PackOptions::PACK_SHRINK);
+    m_button3.hide();
     m_box.pack_start(m_button4, Gtk::PackOptions::PACK_SHRINK);
+    m_button4.hide();
     m_button.set_halign(Gtk::Align::ALIGN_CENTER);
-    m_button1.set_halign(Gtk::Align::ALIGN_CENTER);
-    m_button2.set_halign(Gtk::Align::ALIGN_CENTER);
-    m_button3.set_halign(Gtk::Align::ALIGN_CENTER);
-    m_button4.set_halign(Gtk::Align::ALIGN_CENTER);
+    // Unused buttons don't need halign set if hidden, but it doesn't hurt.
     m_box.set_valign(Gtk::Align::ALIGN_CENTER);
     add(m_box);
     show_all();
     return;
+    // --- END OF MODIFIED LOGIC FOR ERROR CASE ---
   }
 
   std::string html((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
@@ -198,23 +201,41 @@ HelloWorld::HelloWorld()
   // If no matching records found at all, leave first button empty or set message
   if (found == 0) {
     m_button.set_label("No upcoming FDs in next 30 days");
+    found = 1; // Treat the message as 1 found item to ensure m_button is packed/shown
   }
 
-  // Add all buttons to the box and center them
-  m_box.pack_start(m_button, Gtk::PackOptions::PACK_SHRINK);
-  m_box.pack_start(m_button1, Gtk::PackOptions::PACK_SHRINK);
-  m_box.pack_start(m_button2, Gtk::PackOptions::PACK_SHRINK);
-  m_box.pack_start(m_button3, Gtk::PackOptions::PACK_SHRINK);
-  m_box.pack_start(m_button4, Gtk::PackOptions::PACK_SHRINK);
-  m_button.set_halign(Gtk::Align::ALIGN_CENTER);
-  m_button1.set_halign(Gtk::Align::ALIGN_CENTER);
-  m_button2.set_halign(Gtk::Align::ALIGN_CENTER);
-  m_button3.set_halign(Gtk::Align::ALIGN_CENTER);
-  m_button4.set_halign(Gtk::Align::ALIGN_CENTER);
+  // --- START OF MODIFIED LOGIC TO SHOW ONLY USED BUTTONS ---
+
+  // Array of pointers to the member buttons for easier iteration
+  Gtk::Button* buttons[] = {&m_button, &m_button1, &m_button2, &m_button3, &m_button4};
+  const int max_buttons = 5;
+
+  // Iterate over all potential buttons
+  for (int i = 0; i < max_buttons; ++i) {
+    // Center all buttons horizontally
+    buttons[i]->set_halign(Gtk::Align::ALIGN_CENTER);
+    
+    if (i < found) {
+      // If the button was used (i.e., its index is less than the count of found FDs), 
+      // pack it into the box.
+      m_box.pack_start(*buttons[i], Gtk::PackOptions::PACK_SHRINK);
+    } else {
+      // Otherwise, the button is unused, so explicitly hide it.
+      // Since it's never packed, it won't take up space in the box.
+      // Calling hide() ensures it doesn't appear even if mistakenly packed later.
+      buttons[i]->hide();
+    }
+  }
+  
+  // Center the box vertically
   m_box.set_valign(Gtk::Align::ALIGN_CENTER);
+  // Add the box (which now contains only the necessary buttons) to the window
   add(m_box);
 
+  // Show the window and all its visible children.
   show_all();
+  
+  // --- END OF MODIFIED LOGIC TO SHOW ONLY USED BUTTONS ---
 }
 
 HelloWorld::~HelloWorld()
