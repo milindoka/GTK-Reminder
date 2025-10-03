@@ -17,7 +17,11 @@ protected:
 
   //Member widgets:
   Gtk::Button m_button;
-  // NEW: A Gtk::Box to hold and center the button
+  Gtk::Button m_button1;
+  Gtk::Button m_button2;
+  Gtk::Button m_button3;
+  Gtk::Button m_button4;
+  // NEW: A Gtk::Box to hold and center the buttons
   Gtk::Box m_box; 
 };
 

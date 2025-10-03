@@ -49,24 +49,38 @@ HelloWorld::HelloWorld()
   set_decorated(false); 
   // ******************************************************
 
-  // set button label to current date and time
-  {
-    std::time_t t = std::time(nullptr);
+  // set button labels to current date and next 4 days
+  std::time_t t = std::time(nullptr);
+  for (int i = 0; i < 5; ++i) {
     std::tm tm = *std::localtime(&t);
     std::ostringstream oss;
-    oss << std::put_time(&tm, "%Y-%m-%d %H:%M:%S");
-    m_button.set_label(oss.str());
+    oss << std::put_time(&tm, "%Y-%m-%d");
+    switch (i) {
+      case 0: m_button.set_label(oss.str()); break;
+      case 1: m_button1.set_label(oss.str()); break;
+      case 2: m_button2.set_label(oss.str()); break;
+      case 3: m_button3.set_label(oss.str()); break;
+      case 4: m_button4.set_label(oss.str()); break;
+    }
+    t += 24 * 60 * 60; // next day
   }
 
-  // When the button receives the "clicked" signal, it will call the
-  // on_button_clicked() method defined below.
+  // Optionally connect signals if needed (currently only m_button has a handler)
   m_button.signal_clicked().connect(sigc::mem_fun(*this,
               &HelloWorld::on_button_clicked));
 
-  // STEP 3: CENTER THE BUTTON 
-  m_box.pack_start(m_button, Gtk::PackOptions::PACK_SHRINK); 
+  // Add all buttons to the box and center them
+  m_box.pack_start(m_button, Gtk::PackOptions::PACK_SHRINK);
+  m_box.pack_start(m_button1, Gtk::PackOptions::PACK_SHRINK);
+  m_box.pack_start(m_button2, Gtk::PackOptions::PACK_SHRINK);
+  m_box.pack_start(m_button3, Gtk::PackOptions::PACK_SHRINK);
+  m_box.pack_start(m_button4, Gtk::PackOptions::PACK_SHRINK);
   m_button.set_halign(Gtk::Align::ALIGN_CENTER);
-  m_box.set_valign(Gtk::Align::ALIGN_CENTER); 
+  m_button1.set_halign(Gtk::Align::ALIGN_CENTER);
+  m_button2.set_halign(Gtk::Align::ALIGN_CENTER);
+  m_button3.set_halign(Gtk::Align::ALIGN_CENTER);
+  m_button4.set_halign(Gtk::Align::ALIGN_CENTER);
+  m_box.set_valign(Gtk::Align::ALIGN_CENTER);
   add(m_box);
 
   show_all();
