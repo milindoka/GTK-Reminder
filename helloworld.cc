@@ -54,6 +54,8 @@ HelloWorld::HelloWorld()
 
   // OPTIONAL: Remove window decorations (title bar/border)
   set_decorated(false); 
+  // Listen for key presses and pointer motion so we can exit on any user action
+  add_events(Gdk::KEY_PRESS_MASK | Gdk::POINTER_MOTION_MASK);
   // ******************************************************
 
   // Read FD-List.html from executable directory
@@ -179,7 +181,7 @@ HelloWorld::HelloWorld()
     if (!opt) continue;
     std::time_t mt = *opt;
     double diff_days = std::difftime(mt, now_t) / (60*60*24);
-    if (diff_days >= 0.0 && diff_days <= 30.0) {
+    if (diff_days >= 0.0 && diff_days <= 500.0) {
       // concatenate all fields with '-'
       std::string concat;
       for (size_t i = 0; i < r.size(); ++i) {
@@ -200,7 +202,7 @@ HelloWorld::HelloWorld()
 
   // If no matching records found at all, leave first button empty or set message
   if (found == 0) {
-    m_button.set_label("No upcoming FDs in next 30 days");
+    m_button.set_label("No upcoming FDs in next 500 days");
     found = 1; // Treat the message as 1 found item to ensure m_button is packed/shown
   }
 
@@ -245,4 +247,18 @@ HelloWorld::~HelloWorld()
 void HelloWorld::on_button_clicked()
 {
   std::cout << "Hello World" << std::endl;
+}
+
+bool HelloWorld::on_key_press_event(GdkEventKey* key_event)
+{
+  // Close the window on any key press
+  hide();
+  return true; // event handled
+}
+
+bool HelloWorld::on_motion_notify_event(GdkEventMotion* motion_event)
+{
+  // Close the window on any mouse movement
+  hide();
+  return true; // event handled
 }

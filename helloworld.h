@@ -14,6 +14,9 @@ public:
 protected:
   //Signal handlers:
   void on_button_clicked();
+  // Exit on any key press or mouse movement
+  bool on_key_press_event(GdkEventKey* key_event) override;
+  bool on_motion_notify_event(GdkEventMotion* motion_event) override;
 
   //Member widgets:
   Gtk::Button m_button;
