@@ -16,8 +16,8 @@
 #include <algorithm>
 
 HelloWorld::HelloWorld()
-// Initialize the box as vertical
-: m_button(), m_box(Gtk::Orientation::ORIENTATION_VERTICAL) 
+// Initialize the scrolled window and box
+: m_scrolled_window(), m_box(Gtk::Orientation::ORIENTATION_VERTICAL)
 {
   // Sets the border width of the window.
   set_border_width(10);
@@ -89,25 +89,29 @@ HelloWorld::HelloWorld()
 
   std::ifstream ifs(fdpath);
   if (!ifs.is_open()) {
-    m_button.set_label("Error in reding FD");
-    // add buttons (others blank) and show
-    // --- START OF MODIFIED LOGIC FOR ERROR CASE ---
-    m_box.pack_start(m_button, Gtk::PackOptions::PACK_SHRINK);
-    m_box.pack_start(m_button1, Gtk::PackOptions::PACK_SHRINK);
-    m_button1.hide(); // Hide unused buttons explicitly
-    m_box.pack_start(m_button2, Gtk::PackOptions::PACK_SHRINK);
-    m_button2.hide();
-    m_box.pack_start(m_button3, Gtk::PackOptions::PACK_SHRINK);
-    m_button3.hide();
-    m_box.pack_start(m_button4, Gtk::PackOptions::PACK_SHRINK);
-    m_button4.hide();
-    m_button.set_halign(Gtk::Align::ALIGN_CENTER);
-    // Unused buttons don't need halign set if hidden, but it doesn't hurt.
-    m_box.set_valign(Gtk::Align::ALIGN_CENTER);
-    add(m_box);
+    // Create error button for file reading error
+    Gtk::Button* error_button = new Gtk::Button("Error reading FD file");
+    error_button->set_halign(Gtk::Align::ALIGN_CENTER);
+    m_fd_buttons.push_back(error_button);
+
+    // Add error button to the box
+    m_box.pack_start(*error_button, Gtk::PackOptions::PACK_SHRINK);
+
+    // Configure the scrolled window
+    m_scrolled_window.set_policy(Gtk::PolicyType::POLICY_NEVER, Gtk::PolicyType::POLICY_AUTOMATIC);
+    m_scrolled_window.set_min_content_height(100);
+    m_scrolled_window.set_max_content_height(200);
+    m_scrolled_window.add(m_box);
+
+    // Center the scrolled window
+    m_scrolled_window.set_valign(Gtk::Align::ALIGN_CENTER);
+    m_scrolled_window.set_halign(Gtk::Align::ALIGN_CENTER);
+
+    // Add the scrolled window to the main window
+    add(m_scrolled_window);
+
     show_all();
     return;
-    // --- END OF MODIFIED LOGIC FOR ERROR CASE ---
   }
 
   std::string html((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
@@ -174,7 +178,8 @@ HelloWorld::HelloWorld()
 
   std::time_t now_t = std::time(nullptr);
   int found = 0;
-  // iterate rows and find maturity dates
+
+  // iterate rows and find maturity dates - COLLECT ALL FDs (no limit)
   for (const auto &r : rows) {
     if (maturity_col < 0 || maturity_col >= (int)r.size()) continue;
     auto opt = parse_ddmmyy(r[maturity_col]);
@@ -188,60 +193,60 @@ HelloWorld::HelloWorld()
         if (i) concat += " - ";
         concat += r[i];
       }
-      switch (found) {
-        case 0: m_button.set_label(concat); break;
-        case 1: m_button1.set_label(concat); break;
-        case 2: m_button2.set_label(concat); break;
-        case 3: m_button3.set_label(concat); break;
-        case 4: m_button4.set_label(concat); break;
-      }
+
+      // Create a new button for this FD
+      Gtk::Button* fd_button = new Gtk::Button(concat);
+      fd_button->set_halign(Gtk::Align::ALIGN_CENTER);
+
+      // Add click handler (optional - can be customized later)
+      fd_button->signal_clicked().connect([concat]() {
+        std::cout << "FD clicked: " << concat << std::endl;
+      });
+
+      m_fd_buttons.push_back(fd_button);
       ++found;
-      if (found >= 5) break;
     }
   }
 
-  // If no matching records found at all, leave first button empty or set message
+  // If no matching records found at all, show a message
   if (found == 0) {
-    m_button.set_label("No upcoming FDs in next 500 days");
-    found = 1; // Treat the message as 1 found item to ensure m_button is packed/shown
+    Gtk::Button* no_fd_button = new Gtk::Button("No upcoming FDs in next 500 days");
+    no_fd_button->set_halign(Gtk::Align::ALIGN_CENTER);
+    m_fd_buttons.push_back(no_fd_button);
   }
 
-  // --- START OF MODIFIED LOGIC TO SHOW ONLY USED BUTTONS ---
-
-  // Array of pointers to the member buttons for easier iteration
-  Gtk::Button* buttons[] = {&m_button, &m_button1, &m_button2, &m_button3, &m_button4};
-  const int max_buttons = 5;
-
-  // Iterate over all potential buttons
-  for (int i = 0; i < max_buttons; ++i) {
-    // Center all buttons horizontally
-    buttons[i]->set_halign(Gtk::Align::ALIGN_CENTER);
-    
-    if (i < found) {
-      // If the button was used (i.e., its index is less than the count of found FDs), 
-      // pack it into the box.
-      m_box.pack_start(*buttons[i], Gtk::PackOptions::PACK_SHRINK);
-    } else {
-      // Otherwise, the button is unused, so explicitly hide it.
-      // Since it's never packed, it won't take up space in the box.
-      // Calling hide() ensures it doesn't appear even if mistakenly packed later.
-      buttons[i]->hide();
-    }
+  // Add all FD buttons to the box
+  for (auto* button : m_fd_buttons) {
+    m_box.pack_start(*button, Gtk::PackOptions::PACK_SHRINK);
   }
-  
-  // Center the box vertically
-  m_box.set_valign(Gtk::Align::ALIGN_CENTER);
-  // Add the box (which now contains only the necessary buttons) to the window
-  add(m_box);
 
-  // Show the window and all its visible children.
+  // Configure the scrolled window with fixed height
+  // Set policy to show vertical scrollbar only when needed
+  m_scrolled_window.set_policy(Gtk::PolicyType::POLICY_NEVER, Gtk::PolicyType::POLICY_AUTOMATIC);
+
+  // Fixed height - shows ~5 buttons but scrolls for more
+  m_scrolled_window.set_min_content_height(250);
+  m_scrolled_window.set_max_content_height(250);
+  m_scrolled_window.add(m_box);
+
+  // Center the scrolled window vertically and horizontally
+  m_scrolled_window.set_valign(Gtk::Align::ALIGN_CENTER);
+  m_scrolled_window.set_halign(Gtk::Align::ALIGN_CENTER);
+
+  // Add the scrolled window to the main window
+  add(m_scrolled_window);
+
+  // Show the window and all its visible children
   show_all();
-  
-  // --- END OF MODIFIED LOGIC TO SHOW ONLY USED BUTTONS ---
 }
 
 HelloWorld::~HelloWorld()
 {
+  // Clean up dynamically allocated buttons
+  for (auto* button : m_fd_buttons) {
+    delete button;
+  }
+  m_fd_buttons.clear();
 }
 
 void HelloWorld::on_button_clicked()
@@ -258,7 +263,6 @@ bool HelloWorld::on_key_press_event(GdkEventKey* key_event)
 
 bool HelloWorld::on_motion_notify_event(GdkEventMotion* motion_event)
 {
-  // Close the window on any mouse movement
-  hide();
-  return true; // event handled
+  // Do NOT close the window on mouse movement - only exit on key press
+  return false; // event not handled - allow normal mouse interaction
 }

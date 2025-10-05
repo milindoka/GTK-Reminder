@@ -3,7 +3,9 @@
 
 #include <gtkmm/button.h>
 #include <gtkmm/window.h>
-#include <gtkmm/box.h> // <-- NEW: Include Gtk::Box for centering
+#include <gtkmm/box.h>
+#include <gtkmm/scrolledwindow.h>
+#include <vector>
 
 class HelloWorld : public Gtk::Window
 {
@@ -19,13 +21,9 @@ protected:
   bool on_motion_notify_event(GdkEventMotion* motion_event) override;
 
   //Member widgets:
-  Gtk::Button m_button;
-  Gtk::Button m_button1;
-  Gtk::Button m_button2;
-  Gtk::Button m_button3;
-  Gtk::Button m_button4;
-  // NEW: A Gtk::Box to hold and center the buttons
-  Gtk::Box m_box; 
+  Gtk::ScrolledWindow m_scrolled_window;
+  Gtk::Box m_box;
+  std::vector<Gtk::Button*> m_fd_buttons;
 };
 
 #endif //GTKMM_EXAMPLE_HELLOWORLD_H
