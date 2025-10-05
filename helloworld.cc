@@ -14,6 +14,7 @@
 #include <cctype>
 #include <chrono>
 #include <algorithm>
+#include <unordered_map>
 
 HelloWorld::HelloWorld()
 // Initialize the scrolled window and box
@@ -126,6 +127,7 @@ HelloWorld::HelloWorld()
 
   int maturity_col = -1;
   std::vector<std::vector<std::string>> rows;
+  std::unordered_map<std::string,int> header_index;
 
   bool header_found = false;
   for (; tr_it != tr_end; ++tr_it) {
@@ -139,18 +141,16 @@ HelloWorld::HelloWorld()
       cells.push_back(c);
     }
     if (!header_found) {
-      // If this row contains header-like cells, locate 'Maturity Date'
+      // Treat first non-empty row as header; build header_index map
       for (size_t i = 0; i < cells.size(); ++i) {
         std::string low = cells[i];
         std::transform(low.begin(), low.end(), low.begin(), [](unsigned char ch){ return std::tolower(ch); });
-        if (low == "maturity date") {
-          maturity_col = (int)i;
-          header_found = true;
-          break;
-        }
+        low = trim(low);
+        header_index[low] = (int)i;
+        if (low == "maturity date") maturity_col = (int)i;
       }
-      // If header row but no maturity column, continue scanning
-      if (header_found) continue;
+      header_found = true;
+      continue;
     }
     // Only consider rows with td cells (non-empty)
     if (!cells.empty()) rows.push_back(cells);
@@ -158,12 +158,13 @@ HelloWorld::HelloWorld()
 
   auto parse_ddmmyy = [](const std::string &s) -> std::optional<std::time_t> {
     std::smatch m;
-    std::regex d_re("(\\d{1,2})/(\\d{1,2})/(\\d{2})");
+    // support DD/MM/YY or DD/MM/YYYY
+    std::regex d_re("(\\d{1,2})/(\\d{1,2})/(\\d{2,4})");
     if (std::regex_search(s, m, d_re)) {
       int d = std::stoi(m[1].str());
       int mo = std::stoi(m[2].str());
       int yy = std::stoi(m[3].str());
-      int year = 2000 + yy;
+      int year = (yy < 100) ? (2000 + yy) : yy;
       std::tm tm{};
       tm.tm_mday = d;
       tm.tm_mon = mo - 1;
@@ -176,6 +177,21 @@ HelloWorld::HelloWorld()
     return std::nullopt;
   };
 
+  auto add_months = [](std::time_t t, int months) -> std::optional<std::time_t> {
+    std::tm tm = *std::localtime(&t);
+    int total = tm.tm_mon + months;
+    tm.tm_year += total / 12;
+    tm.tm_mon = total % 12;
+    return std::mktime(&tm);
+  };
+
+  auto parse_double = [](const std::string &s) -> std::optional<double> {
+    std::string tmp;
+    for (char c : s) if ((c >= '0' && c <= '9') || c == '.' || c == '-') tmp.push_back(c);
+    if (tmp.empty()) return std::nullopt;
+    try { return std::stod(tmp); } catch (...) { return std::nullopt; }
+  };
+
   std::time_t now_t = std::time(nullptr);
   int found = 0;
 
@@ -186,31 +202,93 @@ HelloWorld::HelloWorld()
     if (!opt) continue;
     std::time_t mt = *opt;
     double diff_days = std::difftime(mt, now_t) / (60*60*24);
-    if (diff_days >= 0.0 && diff_days <= 500.0) {
+
+    // Normal maturity-based reminder (if within next 30 days)
+    if (diff_days >= 0.0 && diff_days <= 30.0) {
       // concatenate all fields with '-'
       std::string concat;
       for (size_t i = 0; i < r.size(); ++i) {
         if (i) concat += " - ";
         concat += r[i];
       }
-
-      // Create a new button for this FD
       Gtk::Button* fd_button = new Gtk::Button(concat);
       fd_button->set_halign(Gtk::Align::ALIGN_CENTER);
-
-      // Add click handler (optional - can be customized later)
       fd_button->signal_clicked().connect([concat]() {
         std::cout << "FD clicked: " << concat << std::endl;
       });
-
       m_fd_buttons.push_back(fd_button);
       ++found;
+    }
+
+    // GSEC-specific coupon payments: if bank name contains 'gsec'
+    std::string bank_name;
+    for (auto &kv : header_index) {
+      if (kv.first.find("bank") != std::string::npos) {
+        if (kv.second < (int)r.size()) bank_name = r[kv.second];
+        break;
+      }
+    }
+    std::string bank_low = bank_name;
+    std::transform(bank_low.begin(), bank_low.end(), bank_low.begin(), [](unsigned char c){ return std::tolower(c); });
+    if (bank_low.find("gsec") != std::string::npos) {
+      // find indices for opening date, principal, rate, account
+      int opening_idx = -1, principal_idx = -1, rate_idx = -1, acc_idx = -1;
+      auto find_header = [&](const std::vector<std::string> &cands)->int{
+        for (auto &p : cands) {
+          auto it = header_index.find(p);
+          if (it != header_index.end()) return it->second;
+        }
+        return -1;
+      };
+      opening_idx = find_header({"opening date","open date","opening","openingdate","open_date","opening_date"});
+      principal_idx = find_header({"principal","principal amount","amount","amt","principal amt","deposit amount"});
+      rate_idx = find_header({"interest","interest rate","rate"});
+      acc_idx = find_header({"fd-account no","fd account no","account no","account","fd acc","account number"});
+
+      if (opening_idx >= 0 && principal_idx >= 0 && rate_idx >= 0) {
+        std::string opening_str = (opening_idx < (int)r.size()) ? r[opening_idx] : std::string();
+        std::string principal_str = (principal_idx < (int)r.size()) ? r[principal_idx] : std::string();
+        std::string rate_str = (rate_idx < (int)r.size()) ? r[rate_idx] : std::string();
+        std::string acc_str = (acc_idx >=0 && acc_idx < (int)r.size()) ? r[acc_idx] : std::string();
+        auto open_t_opt = parse_ddmmyy(opening_str);
+        if (open_t_opt) {
+          std::time_t open_t = *open_t_opt;
+          for (int months = 6;; months += 6) {
+            auto pay_opt = add_months(open_t, months);
+            if (!pay_opt) break;
+            std::time_t pay_t = *pay_opt;
+            if (pay_t > mt) break;
+            double diff_pay_days = std::difftime(pay_t, now_t) / (60*60*24);
+            if (diff_pay_days >= 0.0 && diff_pay_days <= 30.0) {
+              auto prin_opt = parse_double(principal_str);
+              auto rate_opt = parse_double(rate_str);
+              double interest_amt = 0.0;
+              if (prin_opt && rate_opt) interest_amt = (*prin_opt) * ((*rate_opt)/100.0) * 0.5;
+              std::tm ptm = *std::localtime(&pay_t);
+              char buf[64];
+              std::snprintf(buf, sizeof(buf), "%02d/%02d/%04d", ptm.tm_mday, ptm.tm_mon+1, ptm.tm_year+1900);
+              std::ostringstream entry;
+              entry << buf << " - ";
+              entry << std::fixed << std::setprecision(2) << interest_amt << " - ";
+              entry << "coupan - ";
+              entry << principal_str << " - ";
+              entry << opening_str << " - ";
+              entry << acc_str << " - ";
+              entry << rate_str << " - ";
+              entry << bank_name;
+              Gtk::Button* b = new Gtk::Button(entry.str());
+              b->set_halign(Gtk::Align::ALIGN_CENTER);
+              m_fd_buttons.push_back(b);
+            }
+          }
+        }
+      }
     }
   }
 
   // If no matching records found at all, show a message
-  if (found == 0) {
-    Gtk::Button* no_fd_button = new Gtk::Button("No upcoming FDs in next 500 days");
+  if (found == 0 && m_fd_buttons.empty()) {
+    Gtk::Button* no_fd_button = new Gtk::Button("No upcoming FDs in next 30 days");
     no_fd_button->set_halign(Gtk::Align::ALIGN_CENTER);
     m_fd_buttons.push_back(no_fd_button);
   }
