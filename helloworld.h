@@ -7,6 +7,7 @@
 #include <gtkmm/scrolledwindow.h>
 #include <gtkmm/grid.h>
 #include <vector>
+#include <sigc++/sigc++.h>
 class HelloWorld : public Gtk::Window
 {
 public:
@@ -24,6 +25,9 @@ protected:
   Gtk::ScrolledWindow m_scrolled_window;
   Gtk::Box m_box;
   Gtk::Grid m_grid;
+  // auto-exit control: timeout connection and user-activity flag
+  sigc::connection m_autoexit_conn;
+  bool m_user_active{false};
 };
 
 #endif //GTKMM_EXAMPLE_HELLOWORLD_H

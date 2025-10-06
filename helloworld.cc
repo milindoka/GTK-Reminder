@@ -16,6 +16,8 @@
 #include <algorithm>
 #include <unordered_map>
 #include <gtkmm/label.h>
+#include <glibmm/main.h>
+#include <gdk/gdkkeysyms.h>
 
 HelloWorld::HelloWorld()
 // Initialize the scrolled window and box
@@ -58,6 +60,13 @@ HelloWorld::HelloWorld()
   set_decorated(false); 
   // Listen for key presses and pointer motion so we can exit on any user action
   add_events(Gdk::KEY_PRESS_MASK | Gdk::POINTER_MOTION_MASK);
+  // Start auto-exit timeout: if no activity in 4000ms, quit
+  m_autoexit_conn = Glib::signal_timeout().connect([this]() {
+    if (!m_user_active) {
+      hide(); // close window
+    }
+    return false; // single-shot: stop the timeout
+  }, 4000);
   // ******************************************************
 
   // Read FD-List.html from executable directory
@@ -241,7 +250,7 @@ HelloWorld::HelloWorld()
         auto t = trim(token);
         if (!t.empty()) fields.push_back(t);
       }
-      // Determine bank name for this row to check GSEC; if not GSEC, insert third column 'FD-Mat'
+      // Determine bank name for this row to check GSEC; if not GSEC, insert third column 'FD-MAT'
       std::string bank_name_for_row;
       for (auto &kv : header_index) {
         if (kv.first.find("bank") != std::string::npos) {
@@ -252,10 +261,10 @@ HelloWorld::HelloWorld()
       std::string bank_low_for_row = bank_name_for_row;
       std::transform(bank_low_for_row.begin(), bank_low_for_row.end(), bank_low_for_row.begin(), [](unsigned char c){ return std::tolower(c); });
       if (bank_low_for_row.find("gsec") == std::string::npos) {
-        // ensure at least two columns exist, then insert 'FD-Mat' at index 2 (third column)
+        // ensure at least two columns exist, then insert 'FD-MAT' at index 2 (third column)
         size_t insert_pos = 2;
         if (fields.size() < insert_pos) fields.resize(insert_pos);
-        fields.insert(fields.begin() + insert_pos, std::string("FD-Mat"));
+        fields.insert(fields.begin() + insert_pos, std::string("FD-MAT"));
       }
       reminders.push_back(fields);
       ++found;
@@ -312,7 +321,7 @@ HelloWorld::HelloWorld()
               std::ostringstream entry;
               entry << buf << " - ";
               entry << std::fixed << std::setprecision(2) << interest_amt << " - ";
-              entry << "coupan - ";
+              entry << "COUPAN - ";
               entry << principal_str << " - ";
               entry << opening_str << " - ";
               entry << acc_str << " - ";
@@ -329,12 +338,12 @@ HelloWorld::HelloWorld()
                 entry << " - " << r[name_idx];
               }
               // remove any Sr fields - we don't include them here
-              // coupon reminder fields: date, interest amount, 'coupan', principal, opening, acc no, rate, bank, optional name
+              // coupon reminder fields: date, interest amount, 'COUPAN', principal, opening, acc no, rate, bank, optional name
               std::vector<std::string> fields;
               fields.push_back(std::string(buf));
               std::ostringstream amt; amt << std::fixed << std::setprecision(2) << interest_amt;
               fields.push_back(amt.str());
-              fields.push_back(std::string("coupan"));
+              fields.push_back(std::string("COUPAN"));
               fields.push_back(principal_str);
               fields.push_back(opening_str);
               fields.push_back(acc_str);
@@ -416,13 +425,17 @@ void HelloWorld::on_button_clicked()
 
 bool HelloWorld::on_key_press_event(GdkEventKey* key_event)
 {
-  // Close the window on any key press
-  hide();
+  // Mark user active; if ESC pressed, quit immediately
+  m_user_active = true;
+  if (key_event->keyval == GDK_KEY_Escape) {
+    hide();
+  }
   return true; // event handled
 }
 
 bool HelloWorld::on_motion_notify_event(GdkEventMotion* motion_event)
 {
-  // Do NOT close the window on mouse movement - only exit on key press
-  return false; // event not handled - allow normal mouse interaction
+  // On any pointer motion within the timeout period, mark user as active
+  m_user_active = true;
+  return false; // allow normal processing
 }
