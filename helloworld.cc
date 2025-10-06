@@ -355,6 +355,18 @@ HelloWorld::HelloWorld()
     reminders.push_back(std::vector<std::string>{"No upcoming FDs in next 30 days"});
   }
 
+  // Sort reminders by the first column interpreted as a date (DD/MM/YY) when possible
+  std::sort(reminders.begin(), reminders.end(), [&](const std::vector<std::string>& a, const std::vector<std::string>& b){
+    if (a.empty() || b.empty()) return a.size() < b.size();
+    // try to parse first field as date
+    auto da = parse_ddmmyy(a[0]);
+    auto db = parse_ddmmyy(b[0]);
+    if (da && db) return *da < *db;
+    if (da) return true; // date sorts before non-date
+    if (db) return false;
+    return a[0] < b[0];
+  });
+
   // Populate grid with reminders: each reminder row -> grid row, columns as cells
   int row = 0;
   for (const auto &rfields : reminders) {
