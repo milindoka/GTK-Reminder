@@ -5,8 +5,8 @@
 #include <gtkmm/window.h>
 #include <gtkmm/box.h>
 #include <gtkmm/scrolledwindow.h>
+#include <gtkmm/grid.h>
 #include <vector>
-
 class HelloWorld : public Gtk::Window
 {
 public:
@@ -23,7 +23,7 @@ protected:
   //Member widgets:
   Gtk::ScrolledWindow m_scrolled_window;
   Gtk::Box m_box;
-  std::vector<Gtk::Button*> m_fd_buttons;
+  Gtk::Grid m_grid;
 };
 
 #endif //GTKMM_EXAMPLE_HELLOWORLD_H

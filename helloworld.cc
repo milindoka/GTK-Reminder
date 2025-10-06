@@ -15,6 +15,7 @@
 #include <chrono>
 #include <algorithm>
 #include <unordered_map>
+#include <gtkmm/label.h>
 
 HelloWorld::HelloWorld()
 // Initialize the scrolled window and box
@@ -90,25 +91,19 @@ HelloWorld::HelloWorld()
 
   std::ifstream ifs(fdpath);
   if (!ifs.is_open()) {
-    // Create error button for file reading error
-    Gtk::Button* error_button = new Gtk::Button("Error reading FD file");
-    error_button->set_halign(Gtk::Align::ALIGN_CENTER);
-    m_fd_buttons.push_back(error_button);
+    // Show an error label inside the grid
+  auto *lbl = Gtk::manage(new Gtk::Label("Error reading FD file"));
+  lbl->set_halign(Gtk::Align::ALIGN_CENTER);
+  lbl->set_margin_start(4);
+  lbl->set_margin_end(4);
+  lbl->set_margin_top(4);
+  lbl->set_margin_bottom(4);
+    m_grid.attach(*lbl, 0, 0, 1, 1);
 
-    // Add error button to the box
-    m_box.pack_start(*error_button, Gtk::PackOptions::PACK_SHRINK);
-
-    // Configure the scrolled window
     m_scrolled_window.set_policy(Gtk::PolicyType::POLICY_NEVER, Gtk::PolicyType::POLICY_AUTOMATIC);
     m_scrolled_window.set_min_content_height(100);
-    m_scrolled_window.set_max_content_height(200);
-    m_scrolled_window.add(m_box);
+    m_scrolled_window.add(m_grid);
 
-    // Center the scrolled window
-    m_scrolled_window.set_valign(Gtk::Align::ALIGN_CENTER);
-    m_scrolled_window.set_halign(Gtk::Align::ALIGN_CENTER);
-
-    // Add the scrolled window to the main window
     add(m_scrolled_window);
 
     show_all();
@@ -116,7 +111,6 @@ HelloWorld::HelloWorld()
   }
 
   std::string html((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
-  ifs.close();
 
   // Find table rows
   // Use std::regex::icase for case-insensitive matching; avoid unsupported inline flags like (?i)
@@ -194,6 +188,7 @@ HelloWorld::HelloWorld()
 
   std::time_t now_t = std::time(nullptr);
   int found = 0;
+  std::vector<std::vector<std::string>> reminders; // each reminder is a vector of columns
 
   // iterate rows and find maturity dates - COLLECT ALL FDs (no limit)
   for (const auto &r : rows) {
@@ -205,18 +200,64 @@ HelloWorld::HelloWorld()
 
     // Normal maturity-based reminder (if within next 30 days)
     if (diff_days >= 0.0 && diff_days <= 30.0) {
-      // concatenate all fields with '-'
+      // concatenate all fields with '-' but skip 'Sr' column; format maturity date as DD-MM-YY
       std::string concat;
       for (size_t i = 0; i < r.size(); ++i) {
-        if (i) concat += " - ";
-        concat += r[i];
+        // detect if this column is a 'sr' column by checking header keys that contain 'sr'
+        bool is_sr = false;
+        for (auto &kv : header_index) {
+          if (kv.second == (int)i) {
+            std::string hk = kv.first;
+            if (hk.find("sr") != std::string::npos || hk == "s.no" || hk == "sno" || hk == "srno") {
+              is_sr = true;
+            }
+            break;
+          }
+        }
+        if (is_sr) continue; // skip Sr column
+
+        if (!concat.empty()) concat += " - ";
+        if ((int)i == maturity_col) {
+          // parse and reformat maturity date as DD-MM-YY
+          auto mt_opt = parse_ddmmyy(r[i]);
+          if (mt_opt) {
+            std::tm mtm = *std::localtime(&(*mt_opt));
+            char dbuf[16];
+            std::snprintf(dbuf, sizeof(dbuf), "%02d/%02d/%02d", mtm.tm_mday, mtm.tm_mon+1, (mtm.tm_year+1900) % 100);
+            concat += dbuf;
+          } else {
+            concat += r[i];
+          }
+        } else {
+          concat += r[i];
+        }
       }
-      Gtk::Button* fd_button = new Gtk::Button(concat);
-      fd_button->set_halign(Gtk::Align::ALIGN_CENTER);
-      fd_button->signal_clicked().connect([concat]() {
-        std::cout << "FD clicked: " << concat << std::endl;
-      });
-      m_fd_buttons.push_back(fd_button);
+      // build reminder fields by splitting concat on ' - ' (we built it earlier excluding Sr)
+      std::vector<std::string> fields;
+      std::istringstream iss(concat);
+      std::string token;
+      while (std::getline(iss, token, '-')) {
+        // trim token
+        auto t = trim(token);
+        if (!t.empty()) fields.push_back(t);
+      }
+      // Determine bank name for this row to check GSEC; if not GSEC, insert third column 'FD-Mat'
+      std::string bank_name_for_row;
+      for (auto &kv : header_index) {
+        if (kv.first.find("bank") != std::string::npos) {
+          if (kv.second < (int)r.size()) bank_name_for_row = r[kv.second];
+          break;
+        }
+      }
+      std::string bank_low_for_row = bank_name_for_row;
+      std::transform(bank_low_for_row.begin(), bank_low_for_row.end(), bank_low_for_row.begin(), [](unsigned char c){ return std::tolower(c); });
+      if (bank_low_for_row.find("gsec") == std::string::npos) {
+        // ensure at least two columns exist, then insert 'FD-Mat' at index 2 (third column)
+        size_t insert_pos = 2;
+        if (fields.size() < insert_pos) fields.resize(insert_pos);
+        fields.insert(fields.begin() + insert_pos, std::string("FD-Mat"));
+      }
+      reminders.push_back(fields);
       ++found;
     }
 
@@ -266,7 +307,8 @@ HelloWorld::HelloWorld()
               if (prin_opt && rate_opt) interest_amt = (*prin_opt) * ((*rate_opt)/100.0) * 0.5;
               std::tm ptm = *std::localtime(&pay_t);
               char buf[64];
-              std::snprintf(buf, sizeof(buf), "%02d/%02d/%04d", ptm.tm_mday, ptm.tm_mon+1, ptm.tm_year+1900);
+              // format payment date as DD/MM/YY
+              std::snprintf(buf, sizeof(buf), "%02d/%02d/%02d", ptm.tm_mday, ptm.tm_mon+1, (ptm.tm_year+1900) % 100);
               std::ostringstream entry;
               entry << buf << " - ";
               entry << std::fixed << std::setprecision(2) << interest_amt << " - ";
@@ -276,9 +318,31 @@ HelloWorld::HelloWorld()
               entry << acc_str << " - ";
               entry << rate_str << " - ";
               entry << bank_name;
-              Gtk::Button* b = new Gtk::Button(entry.str());
-              b->set_halign(Gtk::Align::ALIGN_CENTER);
-              m_fd_buttons.push_back(b);
+              // append Name column if present (use header_index to find it)
+              int name_idx = -1;
+              for (auto &kv2 : header_index) {
+                if (kv2.first.find("name") != std::string::npos && kv2.first.find("bank") == std::string::npos) {
+                  name_idx = kv2.second; break;
+                }
+              }
+              if (name_idx >= 0 && name_idx < (int)r.size()) {
+                entry << " - " << r[name_idx];
+              }
+              // remove any Sr fields - we don't include them here
+              // coupon reminder fields: date, interest amount, 'coupan', principal, opening, acc no, rate, bank, optional name
+              std::vector<std::string> fields;
+              fields.push_back(std::string(buf));
+              std::ostringstream amt; amt << std::fixed << std::setprecision(2) << interest_amt;
+              fields.push_back(amt.str());
+              fields.push_back(std::string("coupan"));
+              fields.push_back(principal_str);
+              fields.push_back(opening_str);
+              fields.push_back(acc_str);
+              fields.push_back(rate_str);
+              fields.push_back(bank_name);
+              if (name_idx >= 0 && name_idx < (int)r.size()) fields.push_back(r[name_idx]);
+              reminders.push_back(fields);
+              ++found;
             }
           }
         }
@@ -287,15 +351,25 @@ HelloWorld::HelloWorld()
   }
 
   // If no matching records found at all, show a message
-  if (found == 0 && m_fd_buttons.empty()) {
-    Gtk::Button* no_fd_button = new Gtk::Button("No upcoming FDs in next 30 days");
-    no_fd_button->set_halign(Gtk::Align::ALIGN_CENTER);
-    m_fd_buttons.push_back(no_fd_button);
+  if (found == 0 && reminders.empty()) {
+    reminders.push_back(std::vector<std::string>{"No upcoming FDs in next 30 days"});
   }
 
-  // Add all FD buttons to the box
-  for (auto* button : m_fd_buttons) {
-    m_box.pack_start(*button, Gtk::PackOptions::PACK_SHRINK);
+  // Populate grid with reminders: each reminder row -> grid row, columns as cells
+  int row = 0;
+  for (const auto &rfields : reminders) {
+    int col = 0;
+    for (const auto &cell : rfields) {
+  auto *lbl = Gtk::manage(new Gtk::Label(cell));
+  lbl->set_halign(Gtk::Align::ALIGN_START);
+  lbl->set_margin_start(4);
+  lbl->set_margin_end(4);
+  lbl->set_margin_top(4);
+  lbl->set_margin_bottom(4);
+      m_grid.attach(*lbl, col, row, 1, 1);
+      ++col;
+    }
+    ++row;
   }
 
   // Configure the scrolled window with fixed height
@@ -305,26 +379,22 @@ HelloWorld::HelloWorld()
   // Fixed height - shows ~5 buttons but scrolls for more
   m_scrolled_window.set_min_content_height(250);
   m_scrolled_window.set_max_content_height(250);
-  m_scrolled_window.add(m_box);
 
   // Center the scrolled window vertically and horizontally
   m_scrolled_window.set_valign(Gtk::Align::ALIGN_CENTER);
   m_scrolled_window.set_halign(Gtk::Align::ALIGN_CENTER);
 
-  // Add the scrolled window to the main window
+  // Add grid to scrolled window and main window
+  m_scrolled_window.add(m_grid);
   add(m_scrolled_window);
 
-  // Show the window and all its visible children
+  // Show window and children
   show_all();
 }
 
 HelloWorld::~HelloWorld()
 {
-  // Clean up dynamically allocated buttons
-  for (auto* button : m_fd_buttons) {
-    delete button;
-  }
-  m_fd_buttons.clear();
+  // No dynamic button cleanup required; grid/labels are managed by GTKmm
 }
 
 void HelloWorld::on_button_clicked()
