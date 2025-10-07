@@ -7,6 +7,7 @@
 #include <gtkmm/cssprovider.h> 
 #include <gtkmm/stylecontext.h> 
 #include <gdkmm/screen.h> // <-- NEW: Include for Gdk::Screen
+#include <glibmm/main.h>
 #include <fstream>
 #include <regex>
 #include <optional>
@@ -60,13 +61,13 @@ HelloWorld::HelloWorld()
   set_decorated(false); 
   // Listen for key presses and pointer motion so we can exit on any user action
   add_events(Gdk::KEY_PRESS_MASK | Gdk::POINTER_MOTION_MASK);
-  // Start auto-exit timeout: if no activity in 4000ms, quit
+  // Start auto-exit timeout: if no activity in 16000ms, quit
   m_autoexit_conn = Glib::signal_timeout().connect([this]() {
     if (!m_user_active) {
       hide(); // close window
     }
     return false; // single-shot: stop the timeout
-  }, 4000);
+  }, 16000);
   // ******************************************************
 
   // Read FD-List.html from executable directory
@@ -411,6 +412,30 @@ HelloWorld::HelloWorld()
 
   // Show window and children
   show_all();
+
+  // Make window focusable/visible when started at login/startup.
+  // Some desktop sessions are still initializing at startup; delay presenting briefly
+  // so the window is raised reliably and appears in Alt-Tab.
+  set_type_hint(Gdk::WINDOW_TYPE_HINT_NORMAL);
+  set_accept_focus(true);
+  set_skip_taskbar_hint(false);
+
+  // present after a short delay to allow the desktop to finish loading
+  Glib::signal_timeout().connect([this]() {
+    try {
+      this->present();
+      this->set_keep_above(true);
+    } catch (...) {
+      // ignore any errors during early-present
+    }
+    return false; // one-shot
+  }, 500);
+
+  // clear keep-above after a few seconds so it doesn't stay on top permanently
+  Glib::signal_timeout().connect([this]() {
+    try { this->set_keep_above(false); } catch (...) {}
+    return false;
+  }, 3500);
 }
 
 HelloWorld::~HelloWorld()

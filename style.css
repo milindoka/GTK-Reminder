@@ -5,3 +5,19 @@ window {
     /* This line is crucial for transparency to work correctly */
     background-image: none;
 }
+
+/* Style for labels to improve readability */
+label {
+    background-color: rgba(255, 255, 255, 0.95);
+    color: #000000;
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-weight: 500;
+}
+
+/* Alternative: Style for grid background */
+grid {
+    background-color: rgba(240, 240, 240, 0.9);
+    border-radius: 5px;
+    padding: 8px;
+}
